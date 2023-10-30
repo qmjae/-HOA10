@@ -1,0 +1,146 @@
+---
+- name: Install Updates
+  dnf:
+    name: '*'
+    state: latest
+    use_backend: dnf4
+  when: ansible_distribution == "CentOS"
+
+- name: Install OpenJDK
+  dnf:
+    name: java-11-openjdk-devel
+    state: present
+    use_backend: dnf4
+  when: ansible_distribution == "CentOS"
+
+- name: Download and install Elasticsearch RPM package
+  get_url:
+    url: https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.15.0-x86_64.rpm
+    dest: /tmp/elasticsearch.rpm
+  when: ansible_distribution == "CentOS"
+
+- name: Import Elasticsearch GPG Key
+  rpm_key:
+    state: present
+    key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+  when: ansible_distribution == "CentOS"
+
+- name: Install Elasticsearch
+  dnf:
+    name: /tmp/elasticsearch.rpm
+    state: present
+    use_backend: dnf4
+  when: ansible_distribution == "CentOS"
+
+- name: Enable and start Elasticsearch service
+  service:
+    name: elasticsearch
+    enabled: yes
+    state: started
+  when: ansible_distribution == "CentOS"
+
+- name: Download and install Kibana RPM package
+  get_url:
+    url: https://artifacts.elastic.co/downloads/kibana/kibana-7.15.0-x86_64.rpm
+    dest: /tmp/kibana.rpm
+  when: ansible_distribution == "CentOS"
+
+- name: Install Kibana
+  dnf:
+    name: /tmp/kibana.rpm
+    state: present
+    use_backend: dnf4
+  when: ansible_distribution == "CentOS"
+
+- name: Enable and start Kibana service
+  service:
+    name: kibana
+    enabled: yes
+    state: started
+  when: ansible_distribution == "CentOS"
+
+- name: Download and install Logstash RPM package
+  get_url:
+    url: https://artifacts.elastic.co/downloads/logstash/logstash-7.15.0-x86_64.rpm
+    dest: /tmp/logstash.rpm
+  when: ansible_distribution == "CentOS"
+
+- name: Install Logstash
+  dnf:
+    name: /tmp/logstash.rpm
+    state: present
+    use_backend: dnf4
+  when: ansible_distribution == "CentOS"
+
+- name: Enable and start Logstash service
+  service:
+    name: logstash
+    enabled: yes
+    state: started
+  when: ansible_distribution == "CentOS"
+
+- name: Set up Elasticsearch Authentication
+  lineinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    line: 'xpack.security.enabled: false'
+    insertafter: 'cluster.name: my-application'
+    state: present
+  when: ansible_distribution == "CentOS"
+
+- name: Restart Elasticsearch
+  service:
+    name: elasticsearch
+    state: restarted
+  when: ansible_distribution == "CentOS"
+
+- name: Set up HTTPS for Elasticsearch
+  blockinfile:
+    path: /etc/elasticsearch/elasticsearch.yml
+    block: |
+      xpack.security.http.ssl.enabled: true
+      xpack.security.http.ssl.key: /etc/elasticsearch/private.key
+      xpack.security.http.ssl.certificate: /etc/elasticsearch/certificate.crt
+      xpack.security.http.ssl.certificate_authorities: /etc/elasticsearch/ca-bundle.crt
+  when: ansible_distribution == "CentOS"
+
+- name: Restart Elasticsearch (after HTTPS setup)
+  service:
+    name: elasticsearch
+    state: restarted
+  when: ansible_distribution == "CentOS"
+
+- name: Set up Kibana Authentication
+  stat:
+    path: /etc/kibana/kibana.yml
+  register: auth_check
+  when: ansible_distribution == "CentOS"
+
+- name: Add Elasticsearch Uname and Pword to Kibana Config
+  blockinfile:
+    path: /etc/kibana/kibana.yml
+    block: |
+      elasticsearch.username: "qmjaejercito"
+      elasticsearch.password: "2111419"
+  when: ansible_distribution == "CentOS" and auth_check.stat.exists
+
+- name: Restart Kibana
+  service:
+    name: kibana
+    state: restarted
+  when: ansible_distribution == "CentOS"
+
+- name: Allow Elasticsearch Port
+  become: true
+  command: iptables -A INPUT -p tcp --dport 9200 -j ACCEPT
+  when: ansible_distribution == "CentOS"
+
+- name: Allow Kibana Port
+  become: true
+  command: iptables -A INPUT -p tcp --dport 5601  -j ACCEPT
+  when: ansible_distribution == "CentOS"
+
+- name: Save iptables Rule
+  become: true
+  command: sh -c "iptables-save > /etc/sysconfig/iptables"
+  when: ansible_distribution == "CentOS"
+
